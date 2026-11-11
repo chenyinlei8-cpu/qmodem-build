@@ -1,0 +1,87 @@
+name: Build QModem for ImmortalWrt 25.12.2 MT7621
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-qmodem.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout build repository
+        uses: actions/checkout@v4
+        with:
+          path: builder
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip zlib1g-dev file wget zstd
+
+      - name: Download matching ImmortalWrt SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://downloads.immortalwrt.org/releases/25.12.2/targets/ramips/mt7621/"
+          curl -fsSL "${base}sha256sums" -o sha256sums
+          sdk_line="$(awk '$2 ~ /^\\*?immortalwrt-sdk-25\\.12\\.2-ramips-mt7621_.*\\.tar\\.zst$/ { print; exit }' sha256sums)"
+          if [ -z "$sdk_line" ]; then
+            echo "Could not find the ImmortalWrt 25.12.2 MT7621 SDK in the official checksum list." >&2
+            exit 1
+          fi
+          sdk_hash="$(echo "$sdk_line" | awk '{print $1}')"
+          sdk_file="$(echo "$sdk_line" | awk '{print $2}' | sed 's/^\\*//')"
+          echo "Downloading $sdk_file"
+          wget -q "${base}${sdk_file}" -O "$sdk_file"
+          echo "$sdk_hash  $sdk_file" | sha256sum -c -
+          mkdir sdk
+          tar --zstd -xf "$sdk_file" -C sdk --strip-components=1
+
+      - name: Add QModem feed and select packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd sdk
+          if [ ! -f feeds.conf ]; then
+            cp feeds.conf.default feeds.conf
+          fi
+          echo "src-git qmodem https://github.com/FUjr/QModem.git;main" >> feeds.conf
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          ./scripts/feeds install -a -p qmodem
+          cp ../builder/.github/workflows/openwrt_package.config .config
+          make defconfig
+
+      - name: Compile QModem packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd sdk
+          ./scripts/feeds update qmodem
+          ./scripts/feeds install -a -p qmodem
+          generic_packages="$(cat ../builder/.github/workflows/qmodem_package_generic)"
+          arch_packages="$(cat ../builder/.github/workflows/qmodem_package_arch)"
+          for package in $generic_packages $arch_packages; do
+            echo "===== Building $package ====="
+            make "package/$package/compile" -j"$(nproc)" || make "package/$package/compile" -j1 V=s
+          done
+          echo "===== Built package files ====="
+          find bin/packages -type f \\( -name '*.apk' -o -name '*.ipk' \\) -print
+          test -n "$(find bin/packages -type f \\( -name 'qmodem*.apk' -o -name 'qmodem*.ipk' \\) -print -quit)"
+
+      - name: Upload installable packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: QModem-ImmortalWrt-25.12.2-MT7621-mipsel
+          path: |
+            sdk/bin/packages/**/*.apk
+            sdk/bin/packages/**/*.ipk
+          if-no-files-found: error
+          retention-days: 14
