@@ -38,7 +38,7 @@ baresip_request() {
 	[ -z "$params" ] || json_add_string params "$params"
 	request="$(json_dump)"
 	[ -n "$request" ] || return 1
-	raw="$(printf '%s:%s,' "$(printf '%s' "$request" | wc -c | tr -d ' ')" "$request" | socat -T 0.8 - TCP:127.0.0.1:4444,connect-timeout=1 2>/dev/null)"
+	raw="$(printf '%s:%s,' "$(printf '%s' "$request" | wc -c | tr -d '[:space:]')" "$request" | socat -T 0.8 - TCP:127.0.0.1:4444,connect-timeout=1 2>/dev/null)"
 	frame="$(printf '%s' "$raw" | extract_response_frame)"
 	[ -n "$frame" ] || return 1
 	json_load "$frame" || return 1
