@@ -53,9 +53,11 @@ jobs:
             cp feeds.conf.default feeds.conf
           fi
           echo "src-git qmodem https://github.com/FUjr/QModem.git;main" >> feeds.conf
+          echo "src-link gateway ../builder" >> feeds.conf
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           ./scripts/feeds install -a -p qmodem
+          ./scripts/feeds install -a -p gateway
           cp ../builder/.github/workflows/openwrt_package.config .config
           make defconfig
 
@@ -64,8 +66,9 @@ jobs:
         run: |
           set -euo pipefail
           cd sdk
-          ./scripts/feeds update qmodem
+          ./scripts/feeds update qmodem gateway
           ./scripts/feeds install -a -p qmodem
+          ./scripts/feeds install -a -p gateway
           generic_packages="$(cat ../builder/.github/workflows/qmodem_package_generic)"
           arch_packages="$(cat ../builder/.github/workflows/qmodem_package_arch)"
           for package in $generic_packages $arch_packages; do
