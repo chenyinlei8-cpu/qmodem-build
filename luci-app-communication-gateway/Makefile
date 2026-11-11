@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=Unified Communication Gateway
 LUCI_DESCRIPTION:=Single LuCI page for modem, SIP, WAN, Tailscale and USB audio status
-LUCI_DEPENDS:=+luci-base +qmodem +luci-app-qmodem-next +socat
+LUCI_DEPENDS:=+luci-base +qmodem +luci-app-qmodem-next +baresip-mod-ctrl_tcp +socat
 LUCI_PKGARCH:=all
 
 define Build/Prepare/luci-app-communication-gateway
