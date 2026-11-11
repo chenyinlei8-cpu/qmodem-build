@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/build-qmodem.yml"
+      - ".github/workflows/qmodem_package_generic"
+      - ".github/workflows/qmodem_package_arch"
+      - ".github/workflows/openwrt_package.config"
 
 permissions:
   contents: read
