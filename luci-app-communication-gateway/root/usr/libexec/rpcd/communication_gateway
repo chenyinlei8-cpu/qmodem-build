@@ -56,8 +56,12 @@ status_call() {
 	ts_ip="$(tailscale ip -4 2>/dev/null | head -n 1)"
 	baresip_pid="$(pidof baresip 2>/dev/null)"
 	listener="$(ss -lnt 2>/dev/null | grep ':4444' | head -n 1)"
+	[ -n "$listener" ] || listener="$(netstat -lnt 2>/dev/null | grep ':4444' | head -n 1)"
 	secure=0
 	case "$listener" in *127.0.0.1:4444*) secure=1 ;; esac
+	if [ "$secure" = 0 ]; then
+		awk 'NR > 1 && $2 == "0100007F:115C" && $4 == "0A" { found=1 } END { exit !found }' /proc/net/tcp 2>/dev/null && secure=1
+	fi
 	module_path="$(find /usr/lib/baresip /usr/lib/baresip/modules -name ctrl_tcp.so -print -quit 2>/dev/null)"
 	reginfo=""
 	calls=""
