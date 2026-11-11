@@ -34,6 +34,7 @@ jobs:
           node --check builder/luci-app-communication-gateway/htdocs/luci-static/resources/view/communication-gateway/index.js
 
       - name: Download matching ImmortalWrt SDK
+        id: sdk
         shell: bash
         run: |
           set -euo pipefail
@@ -46,6 +47,8 @@ jobs:
           fi
           sdk_hash="$(echo "$sdk_line" | awk '{print $1}')"
           sdk_file="$(echo "$sdk_line" | awk '{print $2}')"
+          echo "sdk_hash=$sdk_hash" >> "$GITHUB_OUTPUT"
+          echo "sdk_file=$sdk_file" >> "$GITHUB_OUTPUT"
           echo "Downloading $sdk_file"
           wget -q "${base}${sdk_file}" -O "$sdk_file"
           echo "$sdk_hash  $sdk_file" | sha256sum -c -
@@ -53,6 +56,7 @@ jobs:
           tar --zstd -xf "$sdk_file" -C sdk --strip-components=1
 
       - name: Add QModem feed and select packages
+        id: feeds
         shell: bash
         run: |
           set -euo pipefail
@@ -68,15 +72,26 @@ jobs:
           ./scripts/feeds install -a -p gateway
           cp ../builder/.github/workflows/openwrt_package.config .config
           make defconfig
+          qmodem_sha="$(git -C feeds/qmodem rev-parse HEAD)"
+          echo "qmodem_sha=$qmodem_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Restore SDK build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            sdk/dl
+            sdk/build_dir
+            sdk/staging_dir
+          key: ${{ runner.os }}-immortalwrt-${{ steps.sdk.outputs.sdk_hash }}-qmodem-${{ steps.feeds.outputs.qmodem_sha }}-${{ hashFiles('builder/.github/workflows/openwrt_package.config', 'builder/.github/workflows/qmodem_package_generic', 'builder/.github/workflows/qmodem_package_arch') }}
+          restore-keys: |
+            ${{ runner.os }}-immortalwrt-${{ steps.sdk.outputs.sdk_hash }}-qmodem-${{ steps.feeds.outputs.qmodem_sha }}-
 
       - name: Compile QModem and communication gateway packages
         shell: bash
         run: |
           set -euo pipefail
           cd sdk
-          ./scripts/feeds update qmodem gateway
-          ./scripts/feeds install -a -p qmodem
-          ./scripts/feeds install -a -p gateway
+          # Feeds were updated and installed in the previous step; do not repeat the network work.
           menu_file="feeds/qmodem/luci/luci-app-qmodem-next/root/usr/share/luci/menu.d/luci-app-qmodem-next.json"
           test -f "$menu_file"
           sed -i 's/"title": "Modem"/"title": "通信网关"/' "$menu_file"
