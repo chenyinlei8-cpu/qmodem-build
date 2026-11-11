@@ -148,8 +148,9 @@ return view.extend({
 		]);
 	},
 
-	render: function() {
+	render: function(initialData) {
 		var self = this;
+		this.initialData = initialData || {};
 		var root = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, [ '通信网关管理中心' ]),
 			E('p', { 'class': 'cbi-map-descr' }, [ '统一管理 EC20FAG 模组信息、SIP 网络电话、Oracle/Asterisk 注册状态、WAN、Tailscale 与 USB 音频。页面只读取现有网络配置，不修改 WAN 或路由策略。' ])
@@ -252,7 +253,7 @@ return view.extend({
 		root.appendChild(audio);
 
 		this.root = root;
-		this.renderData({ gateway: this.initialData && this.initialData.gateway || {}, modem: this.initialData && this.initialData.modem || {} });
+		this.renderData(this.initialData);
 		this.pollFn = function() { self.refresh(); };
 		poll.add(this.pollFn, 10);
 		return root;
