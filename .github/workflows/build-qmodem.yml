@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           base="https://downloads.immortalwrt.org/releases/25.12.2/targets/ramips/mt7621/"
           curl -fsSL "${base}sha256sums" -o sha256sums
-          sdk_line="$(awk '$2 ~ /^\\*?immortalwrt-sdk-25\\.12\\.2-ramips-mt7621_.*\\.tar\\.zst$/ { print; exit }' sha256sums)"
+          sdk_line="$(awk '$2 ~ /^\\*?immortalwrt-sdk-25[.]12[.]2-ramips-mt7621_.*[.]tar[.]zst$/ { print; exit }' sha256sums)"
           if [ -z "$sdk_line" ]; then
             echo "Could not find the ImmortalWrt 25.12.2 MT7621 SDK in the official checksum list." >&2
             exit 1
@@ -73,8 +73,8 @@ jobs:
             make "package/$package/compile" -j"$(nproc)" || make "package/$package/compile" -j1 V=s
           done
           echo "===== Built package files ====="
-          find bin/packages -type f \\( -name '*.apk' -o -name '*.ipk' \\) -print
-          test -n "$(find bin/packages -type f \\( -name 'qmodem*.apk' -o -name 'qmodem*.ipk' \\) -print -quit)"
+          find bin/packages -type f \( -name '*.apk' -o -name '*.ipk' \) -print
+          test -n "$(find bin/packages -type f \( -name 'qmodem*.apk' -o -name 'qmodem*.ipk' \) -print -quit)"
 
       - name: Upload installable packages
         uses: actions/upload-artifact@v4
