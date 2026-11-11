@@ -31,13 +31,13 @@ jobs:
           set -euo pipefail
           base="https://downloads.immortalwrt.org/releases/25.12.2/targets/ramips/mt7621/"
           curl -fsSL "${base}sha256sums" -o sha256sums
-          sdk_line="$(awk '$2 ~ /^\\*?immortalwrt-sdk-25[.]12[.]2-ramips-mt7621_.*[.]tar[.]zst$/ { print; exit }' sha256sums)"
+          sdk_line="$(awk '{ f=$2; sub(/^\\*/, "", f); sub(/^\\.\\//, "", f); if (f ~ /^immortalwrt-sdk-25[.]12[.]2-ramips-mt7621_.*[.]tar[.]zst$/) { print $1, f; exit } }' sha256sums)"
           if [ -z "$sdk_line" ]; then
             echo "Could not find the ImmortalWrt 25.12.2 MT7621 SDK in the official checksum list." >&2
             exit 1
           fi
           sdk_hash="$(echo "$sdk_line" | awk '{print $1}')"
-          sdk_file="$(echo "$sdk_line" | awk '{print $2}' | sed 's/^\\*//')"
+          sdk_file="$(echo "$sdk_line" | awk '{print $2}')"
           echo "Downloading $sdk_file"
           wget -q "${base}${sdk_file}" -O "$sdk_file"
           echo "$sdk_hash  $sdk_file" | sha256sum -c -
@@ -78,6 +78,10 @@ jobs:
           echo "===== Built package files ====="
           find bin/packages -type f \( -name '*.apk' -o -name '*.ipk' \) -print
           test -n "$(find bin/packages -type f \( -name 'qmodem*.apk' -o -name 'qmodem*.ipk' \) -print -quit)"
+          test -n "$(find bin/packages -type f \( -name 'luci-app-communication-gateway*.apk' -o -name 'luci-app-communication-gateway*.ipk' \) -print -quit)" || {
+            echo "Unified communication gateway package was not produced." >&2
+            exit 1
+          }
 
       - name: Upload installable packages
         uses: actions/upload-artifact@v4
