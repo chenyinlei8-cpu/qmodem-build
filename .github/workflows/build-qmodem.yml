@@ -82,10 +82,19 @@ jobs:
           sed -i 's/"title": "Modem"/"title": "通信网关"/' "$menu_file"
           generic_packages="$(cat ../builder/.github/workflows/qmodem_package_generic)"
           arch_packages="$(cat ../builder/.github/workflows/qmodem_package_arch)"
-          for package in $generic_packages $arch_packages; do
-            echo "===== Building $package ====="
-            make "package/$package/compile" -j"$(nproc)" || make "package/$package/compile" -j1 V=s
+          packages="$generic_packages $arch_packages"
+          make_targets=()
+          for package in $packages; do
+            make_targets+=("package/$package/compile")
           done
+          echo "===== Building all packages together with $(nproc) parallel jobs ====="
+          make "${make_targets[@]}" -j"$(nproc)" || {
+            echo "Combined build failed; retrying package-by-package with verbose logs."
+            for package in $packages; do
+              echo "===== Diagnostic retry: $package ====="
+              make "package/$package/compile" -j1 V=s
+            done
+          }
           echo "===== Built package files ====="
           find bin/packages -type f \( -name '*.apk' -o -name '*.ipk' \) -print
           test -n "$(find bin/packages -type f \( -name 'qmodem*.apk' -o -name 'qmodem*.ipk' \) -print -quit)"
