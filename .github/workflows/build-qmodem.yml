@@ -74,6 +74,9 @@ jobs:
           ./scripts/feeds update qmodem gateway
           ./scripts/feeds install -a -p qmodem
           ./scripts/feeds install -a -p gateway
+          menu_file="feeds/qmodem/luci/luci-app-qmodem-next/root/usr/share/luci/menu.d/luci-app-qmodem-next.json"
+          test -f "$menu_file"
+          sed -i 's/"title": "Modem"/"title": "通信网关"/' "$menu_file"
           generic_packages="$(cat ../builder/.github/workflows/qmodem_package_generic)"
           arch_packages="$(cat ../builder/.github/workflows/qmodem_package_arch)"
           for package in $generic_packages $arch_packages; do
