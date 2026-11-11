@@ -1,0 +1,179 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+
+error_json() {
+	json_init
+	json_add_string error "$1"
+	json_dump
+}
+
+extract_response_frame() {
+	awk '
+	{
+		buf = buf $0
+		gsub(/[\r\n]/, "", buf)
+	}
+	END {
+		while (match(buf, /^[0-9]+:/)) {
+			start = RLENGTH + 1
+			n = substr(buf, 1, RLENGTH - 1) + 0
+			if (length(buf) < start + n)
+				exit
+			frame = substr(buf, start, n)
+			if (frame ~ /"response"[[:space:]]*:/) {
+				print frame
+				exit
+			}
+			buf = substr(buf, start + n + 1)
+		}
+	}'
+}
+
+baresip_request() {
+	local command="$1"
+	local params="$2"
+	local request raw frame ok data
+	json_init
+	json_add_string command "$command"
+	[ -z "$params" ] || json_add_string params "$params"
+	request="$(json_dump)"
+	[ -n "$request" ] || return 1
+	raw="$(printf '%s:%s,' "$(printf '%s' "$request" | wc -c | tr -d ' ')" "$request" | socat -T 0.8 - TCP:127.0.0.1:4444,connect-timeout=1 2>/dev/null)"
+	frame="$(printf '%s' "$raw" | extract_response_frame)"
+	[ -n "$frame" ] || return 1
+	json_load "$frame" || return 1
+	json_get_var ok ok
+	json_get_var data data
+	printf '%s' "$data"
+	[ "$ok" = "1" ] || return 1
+}
+
+status_call() {
+	local wan_json wan_up wan_ip ts_ip baresip_pid listener secure module_path reginfo calls playback capture
+	wan_json="$(ubus call network.interface.wan status 2>/dev/null)"
+	wan_up="$(printf '%s' "$wan_json" | jsonfilter -e '@.up' 2>/dev/null)"
+	wan_ip="$(printf '%s' "$wan_json" | jsonfilter -e '@.ipv4-address[0].address' 2>/dev/null)"
+	ts_ip="$(tailscale ip -4 2>/dev/null | head -n 1)"
+	baresip_pid="$(pidof baresip 2>/dev/null)"
+	listener="$(ss -lnt 2>/dev/null | grep ':4444' | head -n 1)"
+	secure=0
+	case "$listener" in *127.0.0.1:4444*) secure=1 ;; esac
+	module_path="$(find /usr/lib/baresip /usr/lib/baresip/modules -name ctrl_tcp.so -print -quit 2>/dev/null)"
+	reginfo=""
+	calls=""
+	if [ -n "$baresip_pid" ] && [ "$secure" = 1 ]; then
+		reginfo="$(baresip_request reginfo 2>/dev/null)"
+		calls="$(baresip_request listcalls 2>/dev/null)"
+	fi
+	playback=0
+	capture=0
+	aplay -l 2>/dev/null | grep -q 'card [0-9]' && playback=1
+	arecord -l 2>/dev/null | grep -q 'card [0-9]' && capture=1
+
+	json_init
+	[ "$wan_up" = "true" ] && json_add_boolean wan_up 1 || json_add_boolean wan_up 0
+	json_add_string wan_ip "$wan_ip"
+	[ -n "$ts_ip" ] && json_add_boolean tailscale_up 1 || json_add_boolean tailscale_up 0
+	json_add_string tailscale_ip "$ts_ip"
+	[ -n "$baresip_pid" ] && json_add_boolean baresip_running 1 || json_add_boolean baresip_running 0
+	[ -n "$module_path" ] && json_add_boolean ctrl_tcp_module 1 || json_add_boolean ctrl_tcp_module 0
+	[ "$secure" = 1 ] && json_add_boolean ctrl_tcp_secure 1 || json_add_boolean ctrl_tcp_secure 0
+	json_add_string sip_reginfo "$reginfo"
+	json_add_string sip_calls "$calls"
+	[ "$playback" = 1 ] && json_add_boolean usb_audio_playback 1 || json_add_boolean usb_audio_playback 0
+	[ "$capture" = 1 ] && json_add_boolean usb_audio_capture 1 || json_add_boolean usb_audio_capture 0
+	json_dump
+}
+
+enable_sip_control() {
+	local config service module_path backup
+	config="/etc/baresip/config"
+	service="/etc/init.d/baresip-direct"
+	[ -x "$service" ] || service="/etc/init.d/baresip"
+	[ -x "$service" ] || { error_json "未找到 Baresip 启动服务，未修改配置"; return 1; }
+	[ -f "$config" ] || { error_json "未找到 /etc/baresip/config，未修改配置"; return 1; }
+	module_path="$(find /usr/lib/baresip /usr/lib/baresip/modules -name ctrl_tcp.so -print -quit 2>/dev/null)"
+	[ -n "$module_path" ] || { error_json "未检测到 ctrl_tcp.so。请先安装与当前 Baresip 版本匹配的 baresip-mod-ctrl-tcp"; return 1; }
+
+	backup="$config.backup.communication-gateway.$(date +%s)"
+	cp -p "$config" "$backup" || { error_json "配置备份失败，未修改"; return 1; }
+	if ! grep -Eq '^[[:space:]]*module_app[[:space:]]+ctrl_tcp\.so([[:space:]]|$)' "$config"; then
+		printf '\nmodule_app ctrl_tcp.so\n' >> "$config"
+	fi
+	if grep -Eq '^[[:space:]]*ctrl_tcp_listen[[:space:]]+' "$config"; then
+		sed -i 's|^[[:space:]]*ctrl_tcp_listen[[:space:]].*|ctrl_tcp_listen 127.0.0.1:4444|' "$config"
+	else
+		printf 'ctrl_tcp_listen 127.0.0.1:4444\n' >> "$config"
+	fi
+	if ! "$service" restart >/dev/null 2>&1; then
+		error_json "配置已备份并写入，但 Baresip 重启失败。备份文件：$backup"
+		return 1
+	fi
+	json_init
+	json_add_boolean success 1
+	json_add_string backup "$backup"
+	json_add_string message "已启用仅监听 127.0.0.1:4444 的本地控制接口"
+	json_dump
+}
+
+case "$1" in
+	list)
+		cat <<'EOF'
+{
+	"status": {},
+	"sip_command": {
+		"action": "string",
+		"target": "string"
+	},
+	"enable_sip_control": {}
+}
+EOF
+		;;
+	call)
+		read -r input
+		json_load "$input" || { error_json "无效请求"; exit 1; }
+		case "$2" in
+			status)
+				status_call
+				;;
+			enable_sip_control)
+				enable_sip_control
+				;;
+			sip_command)
+				json_get_var action action
+				json_get_var target target
+				command=""
+				params=""
+				case "$action" in
+					dial)
+						case "$target" in sip:*|sips:*) ;; *) error_json "请输入完整 SIP URI，例如 sip:1001@example.com"; exit 1 ;; esac
+						case "$target" in *[!A-Za-z0-9@._:+%-]*) error_json "SIP URI 含有不支持的字符"; exit 1 ;; esac
+						[ "${#target}" -le 180 ] || { error_json "SIP URI 太长"; exit 1; }
+						command="dial"
+						params="$target"
+						;;
+					answer) command="accept" ;;
+					hangup) command="hangup" ;;
+					mute) command="m" ;;
+					dtmf)
+						case "$target" in [0-9]|\#|\*) ;; *) error_json "DTMF 仅支持 0-9、#、*"; exit 1 ;; esac
+						command="$target"
+						;;
+					*) error_json "不支持的通话操作"; exit 1 ;;
+				esac
+				result="$(baresip_request "$command" "$params" 2>&1)" || { error_json "${result:-Baresip 控制接口不可用}"; exit 1; }
+				json_init
+				json_add_boolean success 1
+				json_add_string result "$result"
+				json_dump
+				;;
+			*)
+				error_json "未知方法"
+				exit 1
+				;;
+		esac
+		;;
+	*)
+		exit 1
+		;;
+esac
