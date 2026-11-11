@@ -1,0 +1,18 @@
+{
+  "luci-app-communication-gateway": {
+    "description": "Unified communication gateway dashboard",
+    "read": {
+      "ubus": {
+        "communication_gateway": [ "status" ],
+        "qmodem": [ "info", "get_sms" ]
+      },
+      "uci": [ "qmodem" ]
+    },
+    "write": {
+      "ubus": {
+        "communication_gateway": [ "sip_command", "enable_sip_control" ],
+        "qmodem": [ "send_sms" ]
+      }
+    }
+  }
+}
