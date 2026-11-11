@@ -66,7 +66,7 @@ jobs:
           cp ../builder/.github/workflows/openwrt_package.config .config
           make defconfig
 
-      - name: Compile QModem packages
+      - name: Compile QModem and communication gateway packages
         shell: bash
         run: |
           set -euo pipefail
@@ -86,6 +86,10 @@ jobs:
           echo "===== Built package files ====="
           find bin/packages -type f \( -name '*.apk' -o -name '*.ipk' \) -print
           test -n "$(find bin/packages -type f \( -name 'qmodem*.apk' -o -name 'qmodem*.ipk' \) -print -quit)"
+          test -n "$(find bin/packages -type f \( -name 'baresip-mod-ctrl_tcp*.apk' -o -name 'baresip-mod-ctrl_tcp*.ipk' \) -print -quit)" || {
+            echo "Matching Baresip ctrl_tcp module was not produced." >&2
+            exit 1
+          }
           test -n "$(find bin/packages -type f \( -name 'luci-app-communication-gateway*.apk' -o -name 'luci-app-communication-gateway*.ipk' \) -print -quit)" || {
             echo "Unified communication gateway package was not produced." >&2
             exit 1
