@@ -1,6 +1,8 @@
 luci-app-qmodem-next
+luci-i18n-qmodem-next-zh-cn
 qmodem
 qmodem_smsd
 sms_forwarder_next
 luci-app-communication-gateway
 socat
+baresip-mod-ctrl_tcp
