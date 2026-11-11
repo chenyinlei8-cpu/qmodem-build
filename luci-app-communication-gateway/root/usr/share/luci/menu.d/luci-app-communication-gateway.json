@@ -1,6 +1,6 @@
 {
-  "admin/services/communication-gateway": {
-    "title": "通信网关",
+  "admin/modem/gateway": {
+    "title": "总览",
     "order": 5,
     "action": {
       "type": "view",
