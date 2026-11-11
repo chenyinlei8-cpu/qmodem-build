@@ -65,13 +65,18 @@ jobs:
             cp feeds.conf.default feeds.conf
           fi
           echo "src-git qmodem https://github.com/FUjr/QModem.git;main" >> feeds.conf
-          echo "src-link gateway ../builder" >> feeds.conf
+          echo "src-link gateway ${GITHUB_WORKSPACE}/builder" >> feeds.conf
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           ./scripts/feeds install -a -p qmodem
           ./scripts/feeds install -a -p gateway
           cp ../builder/.github/workflows/openwrt_package.config .config
           make defconfig
+          if ! grep -q '^CONFIG_USE_APK=y$' .config; then
+            echo 'CONFIG_USE_APK=y' >> .config
+            make defconfig
+          fi
+          grep -q '^CONFIG_USE_APK=y$' .config || { echo "SDK is not configured for APK packaging." >&2; exit 1; }
           qmodem_sha="$(git -C feeds/qmodem rev-parse HEAD)"
           echo "qmodem_sha=$qmodem_sha" >> "$GITHUB_OUTPUT"
 
@@ -111,13 +116,13 @@ jobs:
             done
           }
           echo "===== Built package files ====="
-          find bin/packages -type f \( -name '*.apk' -o -name '*.ipk' \) -print
-          test -n "$(find bin/packages -type f \( -name 'qmodem*.apk' -o -name 'qmodem*.ipk' \) -print -quit)"
-          test -n "$(find bin/packages -type f \( -name 'baresip-mod-ctrl_tcp*.apk' -o -name 'baresip-mod-ctrl_tcp*.ipk' \) -print -quit)" || {
+          find bin/packages -type f -name '*.apk' -print
+          test -n "$(find bin/packages -type f -name 'qmodem*.apk' -print -quit)"
+          test -n "$(find bin/packages -type f -name 'baresip-mod-ctrl_tcp*.apk' -print -quit)" || {
             echo "Matching Baresip ctrl_tcp module was not produced." >&2
             exit 1
           }
-          test -n "$(find bin/packages -type f \( -name 'luci-app-communication-gateway*.apk' -o -name 'luci-app-communication-gateway*.ipk' \) -print -quit)" || {
+          test -n "$(find bin/packages -type f -name 'luci-app-communication-gateway*.apk' -print -quit)" || {
             echo "Unified communication gateway package was not produced." >&2
             exit 1
           }
@@ -128,6 +133,5 @@ jobs:
           name: QModem-ImmortalWrt-25.12.2-MT7621-mipsel
           path: |
             sdk/bin/packages/**/*.apk
-            sdk/bin/packages/**/*.ipk
           if-no-files-found: error
           retention-days: 14
