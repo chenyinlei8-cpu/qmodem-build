@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           base="https://downloads.immortalwrt.org/releases/25.12.2/targets/ramips/mt7621/"
           curl -fsSL "${base}sha256sums" -o sha256sums
-          sdk_line="$(awk '{ f=$2; sub(/^\\*/, "", f); sub(/^\\.\\//, "", f); if (f ~ /^immortalwrt-sdk-25[.]12[.]2-ramips-mt7621_.*[.]tar[.]zst$/) { print $1, f; exit } }' sha256sums)"
+          sdk_line="$(awk '{ f=$2; if (substr(f,1,1)=="*") f=substr(f,2); if (substr(f,1,2)=="./") f=substr(f,3); if (f ~ /^immortalwrt-sdk-25[.]12[.]2-ramips-mt7621_.*[.]tar[.]zst$/) { print $1, f; exit } }' sha256sums)"
           if [ -z "$sdk_line" ]; then
             echo "Could not find the ImmortalWrt 25.12.2 MT7621 SDK in the official checksum list." >&2
             exit 1
